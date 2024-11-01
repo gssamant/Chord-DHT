@@ -2,53 +2,52 @@
 #define helper_h
 
 #include <iostream>
-#include <vector>
-#include <string> // Include for std::string
-#include <utility> // Include for std::pair
 
-#include "nodeInformation.h"
+#include "nodeInfo.h"
 
 using namespace std;
 
 typedef long long int lli;
 
-class HelperFunctions {
+class HelperFunctions{
 
-public:
-    vector<string> splitCommand(string command);
-    string combineIpAndPort(string ip, string port);
-    vector<pair<lli, string>> separateKeysAndValues(string keysAndValues);
-    vector<pair<string, int>> separateSuccessorList(string succList);
-    string splitSuccessorList(vector<pair<pair<string, int>, lli>> list);
+	public:
 
-    lli getHash(string key);
-    pair<string, int> getIpAndPort(string key);
+		vector<string> splitCommand(string command);
+		string combineIpAndPort(string ip,string port);
+		vector< pair<lli,string> > seperateKeysAndValues(string keysAndValues);
+		vector< pair<string,int> > seperateSuccessorList(string succList);
+		string splitSuccessorList(vector< pair< pair<string,int> , lli > > list);
+		
+		lli getHash(string key);
+		pair<string,int> getIpAndPort(string key);
+		
+		bool isKeyValue(string id);
 
-    bool isKeyValue(string id);
+		bool isNodeAlive(string ip,int port);
+		
+		void setServerDetails(struct sockaddr_in &server,string ip,int port);
+		void setTimer(struct timeval &timer);
 
-    bool isNodeAlive(string ip, int port);
+		void sendNeccessaryKeys(NodeInformation &nodeInfo,int newSock,struct sockaddr_in client,string nodeIdString);
+		void sendKeyToNode(pair< pair<string,int> , lli > node,lli keyHash,string value);
+		void sendValToNode(NodeInformation nodeInfo,int newSock,struct sockaddr_in client,string nodeIdString);
+		string getKeyFromNode(pair< pair<string,int> , lli > node,string keyHash);
+		pair<lli,string> getKeyAndVal(string keyAndVal);
+		void getKeysFromSuccessor(NodeInformation &nodeInfo,string ip,int port);
+		void storeAllKeys(NodeInformation &nodeInfo,string keysAndValues);
 
-    void setServerDetails(struct sockaddr_in& server, string ip, int port);
-    void setTimer(struct timeval& timer);
+		pair< pair<string,int> , lli > getPredecessorNode(string ip,int port,string ipClient,int ipPort,bool forStabilize);
+		lli getSuccessorId(string ip,int port);
 
-    void sendNecessaryKeys(NodeInformation& nodeInfo, SOCKET newSock, struct sockaddr_in client, string nodeIdString); // Change newSock to SOCKET
-    void sendKeyToNode(pair<pair<string, int>, lli> node, lli keyHash, string value);
-    void sendValToNode(NodeInformation nodeInfo, SOCKET newSock, struct sockaddr_in client, string nodeIdString); // Change newSock to SOCKET
-    string getKeyFromNode(pair<pair<string, int>, lli> node, string keyHash);
-    pair<lli, string> getKeyAndVal(string keyAndVal);
-    void getKeysFromSuccessor(NodeInformation& nodeInfo, string ip, int port);
-    void storeAllKeys(NodeInformation& nodeInfo, string keysAndValues);
+		void sendPredecessor(NodeInformation nodeInfo,int newSock,struct sockaddr_in client);
+		void sendSuccessor(NodeInformation nodeInfo,string nodeIdString,int newSock,struct sockaddr_in client);
+		void sendSuccessorId(NodeInformation nodeInfo,int newSock,struct sockaddr_in client);
+		void sendAcknowledgement(int newSock,struct sockaddr_in client);
 
-    pair<pair<string, int>, lli> getPredecessorNode(string ip, int port, string ipClient, int ipPort, bool forStabilize);
-    lli getSuccessorId(string ip, int port);
-
-    void sendPredecessor(NodeInformation nodeInfo, SOCKET newSock, struct sockaddr_in client); // Change newSock to SOCKET
-    void sendSuccessor(NodeInformation nodeInfo, string nodeIdString, SOCKET newSock, struct sockaddr_in client); // Change newSock to SOCKET
-    void sendSuccessorId(NodeInformation nodeInfo, SOCKET newSock, struct sockaddr_in client); // Change newSock to SOCKET
-    void sendAcknowledgement(SOCKET newSock, struct sockaddr_in client); // Change newSock to SOCKET
-
-    vector<pair<string, int>> getSuccessorListFromNode(string ip, int port);
-    void sendSuccessorList(NodeInformation& nodeInfo, SOCKET sock, struct sockaddr_in client); // Change sock to SOCKET
+		vector< pair<string,int> > getSuccessorListFromNode(string ip,int port);
+		void sendSuccessorList(NodeInformation &nodeInfo,int sock,struct sockaddr_in client);
 };
+
 
 #endif

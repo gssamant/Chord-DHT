@@ -10,7 +10,7 @@
 #include "port.h"
 #include "functions.h"
 #include "helperClass.h"
-#include "nodeInformation.h"
+#include "nodeInfo.h"
 
 using namespace std;
 

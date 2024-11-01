@@ -1,28 +1,17 @@
-#ifndef functions_h
-#define functions_h
-
 #include <iostream>
-#include <string> // Include for std::string
-
-#include "port.h"
-#include "nodeInformation.h"
+#include <cstring>
+#include <cstdio>
+#include <unistd.h>
+#include <vector>
+#include <cstdlib>
+#include <openssl/sha.h>
+#include <sys/types.h>
+#include <thread>
+#include <ctime>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <cmath>
+#include <mutex>
 
 using namespace std;
-
-typedef long long int lli;
-
-// Function declarations
-void put(string key, string value, NodeInformation &nodeInfo);
-void get(string key, NodeInformation nodeInfo);
-void create(NodeInformation &nodeInfo);
-void join(NodeInformation &nodeInfo, string ip, string port);
-void printState(NodeInformation nodeInfo);
-void listenTo(NodeInformation &nodeInfo);
-void doStabilize(NodeInformation &nodeInfo);
-void callNotify(NodeInformation &nodeInfo, string ipAndPort);
-void callFixFingers(NodeInformation &nodeInfo);
-void doTask(NodeInformation &nodeInfo, SOCKET newSock, struct sockaddr_in client, string nodeIdString); // Change newSock to SOCKET
-void leave(NodeInformation &nodeInfo);
-void showHelp();
-
-#endif
