@@ -1,7 +1,7 @@
 all: do
 
-do: main.o nodeInformation.o helperClass.o init.o port.o functions.o 
-	g++ main.o init.o functions.o port.o nodeInformation.o helperClass.o -o prog -lcrypto -lpthread
+do: main.o nodeInfo.o helperClass.o init.o port.o functions.o 
+	g++ main.o init.o functions.o port.o nodeInfo.o helperClass.o -o prog -lcrypto -lpthread
 	
 main.o: main.cpp
 		g++ -std=c++11 -c main.cpp

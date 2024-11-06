@@ -1,421 +1,643 @@
 #include "headers.h"
+
 #include "helperClass.h"
-
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#include <mutex>
-#include <iostream>
-#include <string>
-#include <vector>
-#include <utility>
-#include <cmath>
-
-using namespace std;
 
 mutex mt;
 
-vector<string> HelperFunctions::splitCommand(string command) {
+/* splits the command into seperate arguments */
+vector<string> HelperFunctions::splitCommand(string command){
     vector<string> arguments;
     int pos = 0;
-    do {
+    do{
         pos = command.find(' ');
-        string arg = command.substr(0, pos);
+        string arg = command.substr(0,pos); 
         arguments.push_back(arg);
-        command = command.substr(pos + 1);
-    } while (pos != -1);
+        command = command.substr(pos+1);
+    }while(pos != -1);
     return arguments;
 }
 
-lli HelperFunctions::getHash(string key) {
-    unsigned char obuf[20];  // SHA1 produces a 20-byte hash
+/* get SHA1 hash for a given key */
+lli HelperFunctions::getHash(string key){
+    unsigned char obuf[41];
     char finalHash[41];
     string keyHash = "";
     int i;
-    lli mod = pow(2, M);
+    lli mod = pow(2,M);
 
-    unsigned char unsigned_key[key.length() + 1];
-    for (i = 0; i < key.length(); i++) {
+    
+    /* convert string to an unsigned char array because SHA1 takes unsigned char array as parameter */
+    unsigned char unsigned_key[key.length()+1];
+    for(i=0;i<key.length();i++){
         unsigned_key[i] = key[i];
     }
     unsigned_key[i] = '\0';
 
-    // Using SHA1 from Windows CryptoAPI
-    // Alternatively, you can use any third-party library for SHA1 in Windows
-    // Assuming SHA1(unsigned_key, sizeof(unsigned_key), obuf) is defined elsewhere
 
-    for (i = 0; i < M / 8; i++) {
-        sprintf(finalHash, "%d", obuf[i]);
+    SHA1(unsigned_key,sizeof(unsigned_key),obuf);
+    for (i = 0; i < M/8; i++) {
+        sprintf(finalHash,"%d",obuf[i]);
         keyHash += finalHash;
     }
 
     lli hash = stoll(keyHash) % mod;
+
     return hash;
 }
 
-pair<string, int> HelperFunctions::getIpAndPort(string key) {
-    int pos = key.find(':');
-    string ip = key.substr(0, pos);
-    string port = key.substr(pos + 1);
+/* key will be in form of ip:port , will seperate ip and port and return it */
+pair<string,int> HelperFunctions::getIpAndPort(string key){
 
-    pair<string, int> ipAndPortPair;
+    int pos = key.find(':');
+    string ip = key.substr(0,pos);
+    string port = key.substr(pos+1);
+
+    pair<string,int> ipAndPortPair;
     ipAndPortPair.first = ip;
     ipAndPortPair.second = atoi(port.c_str());
 
     return ipAndPortPair;
 }
 
-pair<lli, string> HelperFunctions::getKeyAndVal(string keyAndVal) {
-    int pos = keyAndVal.find(':');
-    string key = keyAndVal.substr(0, pos);
-    string val = keyAndVal.substr(pos + 1);
+/* key will be in form of key:value , will seperate key and value and return it */
+pair<lli,string> HelperFunctions::getKeyAndVal(string keyAndVal){
 
-    pair<lli, string> keyAndValPair;
+    int pos = keyAndVal.find(':');
+    string key = keyAndVal.substr(0,pos);
+    string val = keyAndVal.substr(pos+1);
+
+    pair<lli,string> keyAndValPair;
     keyAndValPair.first = stoll(key);
     keyAndValPair.second = val;
 
     return keyAndValPair;
 }
 
-bool HelperFunctions::isKeyValue(string id) {
+/* will decide if id is in form of key:value or not */
+bool HelperFunctions::isKeyValue(string id){
+
     int pos = id.find(":");
-    if (pos == -1)
+
+    if(pos == -1)
         return false;
 
-    for (int i = 0; i < pos; i++) {
-        if (!(id[i] >= '0' && id[i] <= '9'))
+    for(int i=0;i<pos;i++){
+        if( !(id[i] >= 48 && id[i] <= 57) )
             return false;
     }
+
     return true;
 }
 
-string HelperFunctions::getKeyFromNode(pair<pair<string, int>, lli> node, string keyHash) {
+/* will contact a node and get value of a particular key from that node */
+string HelperFunctions::getKeyFromNode(pair< pair<string,int> , lli > node,string keyHash){
     string ip = node.first.first;
     int port = node.first.second;
 
     struct sockaddr_in serverToConnectTo;
     socklen_t l = sizeof(serverToConnectTo);
 
-    setServerDetails(serverToConnectTo, ip, port);
+    setServerDetails(serverToConnectTo,ip,port);
 
-    SOCKET sock = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sock == INVALID_SOCKET) {
-        cerr << "Socket creation error: " << WSAGetLastError() << endl;
+    int sock = socket(AF_INET,SOCK_DGRAM,0);
+
+    if(sock < 0){
+        perror("error");
         exit(-1);
     }
 
     keyHash += "k";
-    char keyHashChar[40];
-    strcpy(keyHashChar, keyHash.c_str());
 
-    sendto(sock, keyHashChar, strlen(keyHashChar), 0, (struct sockaddr*)&serverToConnectTo, l);
+    char keyHashChar[40];
+    strcpy(keyHashChar,keyHash.c_str());
+
+    sendto(sock,keyHashChar,strlen(keyHashChar),0,(struct sockaddr *)&serverToConnectTo,l);
 
     char valChar[100];
-    int len = recvfrom(sock, valChar, sizeof(valChar) - 1, 0, (struct sockaddr*)&serverToConnectTo, &l);
-    if (len == SOCKET_ERROR) {
-        cerr << "recvfrom failed: " << WSAGetLastError() << endl;
-        closesocket(sock);
-        return "";
-    }
+    int len = recvfrom(sock,valChar,1024,0,(struct sockaddr *)&serverToConnectTo,&l);
 
     valChar[len] = '\0';
+
     string val = valChar;
 
-    closesocket(sock);
+    close(sock);
+
     return val;
 }
 
-void HelperFunctions::setServerDetails(struct sockaddr_in& server, string ip, int port) {
+/* set details of server to which you want to connect to */
+void HelperFunctions::setServerDetails(struct sockaddr_in &server,string ip,int port){
     server.sin_family = AF_INET;
-    inet_pton(AF_INET, ip.c_str(), &server.sin_addr);
+    server.sin_addr.s_addr = inet_addr(ip.c_str());
     server.sin_port = htons(port);
 }
 
-void HelperFunctions::sendKeyToNode(pair<pair<string, int>, lli> node, lli keyHash, string value) {
+/* send key to node who requested for it */
+void HelperFunctions::sendKeyToNode(pair< pair<string,int> , lli > node,lli keyHash,string value){
     string ip = node.first.first;
     int port = node.first.second;
 
     struct sockaddr_in serverToConnectTo;
     socklen_t l = sizeof(serverToConnectTo);
 
-    setServerDetails(serverToConnectTo, ip, port);
+    setServerDetails(serverToConnectTo,ip,port);
 
-    SOCKET sock = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sock == INVALID_SOCKET) {
-        cerr << "Socket creation error: " << WSAGetLastError() << endl;
+    int sock = socket(AF_INET,SOCK_DGRAM,0);
+
+    if(sock < 0){
+        perror("error");
         exit(-1);
     }
 
-    string keyAndVal = combineIpAndPort(to_string(keyHash), value);
-    char keyAndValChar[100];
-    strcpy(keyAndValChar, keyAndVal.c_str());
+    string keyAndVal = combineIpAndPort(to_string(keyHash),value);
 
-    sendto(sock, keyAndValChar, strlen(keyAndValChar), 0, (struct sockaddr*)&serverToConnectTo, l);
-    closesocket(sock);
+    char keyAndValChar[100];
+    strcpy(keyAndValChar,keyAndVal.c_str());
+
+    sendto(sock,keyAndValChar,strlen(keyAndValChar),0,(struct sockaddr *)&serverToConnectTo,l);
+
+    close(sock);
 }
 
-void HelperFunctions::getKeysFromSuccessor(NodeInformation& nodeInfo, string ip, int port) {
+
+/* a newly joined node uses this function to get all keys from it's successor which belongs to it now */
+void HelperFunctions::getKeysFromSuccessor(NodeInformation &nodeInfo,string ip,int port){
     struct sockaddr_in serverToConnectTo;
     socklen_t l = sizeof(serverToConnectTo);
 
-    setServerDetails(serverToConnectTo, ip, port);
+    setServerDetails(serverToConnectTo,ip,port);
 
-    SOCKET sock = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sock == INVALID_SOCKET) {
-        cerr << "Socket creation error: " << WSAGetLastError() << endl;
+    int sock = socket(AF_INET,SOCK_DGRAM,0);
+    if(sock < 0){
+        perror("error");
         exit(-1);
     }
 
+    /* node sends msg "getKeys:id" to it's successor to get all keys which belongs to this node now */
     string id = to_string(nodeInfo.getId());
+
+
     string msg = "getKeys:" + id;
 
     char msgChar[40];
-    strcpy(msgChar, msg.c_str());
+    strcpy(msgChar,msg.c_str());
 
-    sendto(sock, msgChar, strlen(msgChar), 0, (struct sockaddr*)&serverToConnectTo, l);
+    sendto(sock,msgChar,strlen(msgChar),0,(struct sockaddr *) &serverToConnectTo,l);
 
     char keysAndValuesChar[2000];
-    int len = recvfrom(sock, keysAndValuesChar, sizeof(keysAndValuesChar) - 1, 0, (struct sockaddr*)&serverToConnectTo, &l);
-    if (len == SOCKET_ERROR) {
-        cerr << "recvfrom failed: " << WSAGetLastError() << endl;
-        closesocket(sock);
-        return;
-    }
+    int len = recvfrom(sock,keysAndValuesChar,2000,0,(struct sockaddr *) &serverToConnectTo,&l);
 
     keysAndValuesChar[len] = '\0';
-    closesocket(sock);
+
+    close(sock);
 
     string keysAndValues = keysAndValuesChar;
-    vector<pair<lli, string>> keysAndValuesVector = separateKeysAndValues(keysAndValues);
 
-    for (const auto& kv : keysAndValuesVector) {
-        nodeInfo.storeKey(kv.first, kv.second);
+    vector< pair<lli,string> > keysAndValuesVector = seperateKeysAndValues(keysAndValues);
+
+    for(int i=0;i<keysAndValuesVector.size();i++){
+        nodeInfo.storeKey(keysAndValuesVector[i].first , keysAndValuesVector[i].second);
     }
+
 }
 
-vector<pair<lli, string>> HelperFunctions::separateKeysAndValues(string keysAndValues) {
-    vector<pair<lli, string>> res;
-    int i = 0, size = keysAndValues.size();
+/* keys and values are in form of key1:val1;key2:val2;.. , will seperate it accordingly */
+vector< pair<lli,string> > HelperFunctions::seperateKeysAndValues(string keysAndValues){
+    int size = keysAndValues.size();
+    int i = 0;
+    vector< pair<lli,string> > res;
 
-    while (i < size) {
+    while(i < size){
         string key = "";
-        while (i < size && keysAndValues[i] != ':') {
-            key += keysAndValues[i++];
+        while(i < size && keysAndValues[i] != ':'){
+            key += keysAndValues[i];
+            i++;
         }
         i++;
 
-        string value = "";
-        while (i < size && keysAndValues[i] != ';') {
-            value += keysAndValues[i++];
+        string val = "";
+        while(i < size && keysAndValues[i] != ';'){
+            val += keysAndValues[i];
+            i++;
         }
         i++;
 
-        res.push_back(make_pair(stoll(key), value));
+        res.push_back(make_pair(stoll(key),val));
     }
 
     return res;
 }
 
-vector<pair<string, int>> HelperFunctions::separateSuccessorList(string succList) {
-    vector<pair<string, int>> res;
-    int i = 0, size = succList.size();
+/* string is in form of ip:port;ip:port;... will seperate all these ip's and ports */
+vector< pair<string,int> > HelperFunctions::seperateSuccessorList(string succList){
+    int size = succList.size();
+    int i = 0;
+    vector< pair<string,int> > res;
 
-    while (i < size) {
+    while(i < size){
         string ip = "";
-        while (i < size && succList[i] != ':') {
-            ip += succList[i++];
+        while(i < size && succList[i] != ':'){
+            ip += succList[i];
+            i++;
         }
         i++;
 
         string port = "";
-        while (i < size && succList[i] != ';') {
-            port += succList[i++];
+        while(i < size && succList[i] != ';'){
+            port += succList[i];
+            i++;
         }
         i++;
 
-        res.push_back(make_pair(ip, stoi(port)));
+        res.push_back(make_pair(ip,stoi(port)));
     }
 
     return res;
 }
 
-string HelperFunctions::combineIpAndPort(string ip, string port) {
-    return ip + ":" + port;
+/* combine ip and port as ip:port and return string */
+string HelperFunctions::combineIpAndPort(string ip,string port){
+    string ipAndPort = "";
+    int i=0;
+
+    for(i=0;i<ip.size();i++){
+        ipAndPort += ip[i];
+    }
+
+    ipAndPort += ':';
+
+    for(i=0;i<port.size();i++){
+        ipAndPort += port[i];
+    }
+
+    return ipAndPort;
 }
 
+/* node receives all keys from it's predecessor who is leaving the ring */
+void HelperFunctions::storeAllKeys(NodeInformation &nodeInfo,string keysAndValues){
+    int pos = keysAndValues.find("storeKeys");
 
-void HelperFunctions::storeAllKeys(NodeInformation& nodeInfo, string keysAndValues) {
-    vector<pair<lli, string>> keyValPairs = separateKeysAndValues(keysAndValues);
+    vector< pair<lli,string> > res = seperateKeysAndValues(keysAndValues.substr(0,pos));
 
-    for (const auto& kv : keyValPairs) {
-        nodeInfo.keyValueMap[kv.first] = kv.second;
+    for(int i=0;i<res.size();i++){
+        nodeInfo.storeKey(res[i].first,res[i].second);
     }
 }
 
-void HelperFunctions::sendNecessaryKeys(NodeInformation& nodeInfo, SOCKET newSock, struct sockaddr_in client, string nodeIdString) {
-    lli newNodeId = stoll(nodeIdString);
-    vector<pair<lli, string>> keysToSend;
+/* send all keys to the newly joined node which belong to it now */
+void HelperFunctions::sendNeccessaryKeys(NodeInformation &nodeInfo,int newSock,struct sockaddr_in client,string nodeIdString){
+    socklen_t l = sizeof(client);
 
-    for (const auto& kv : nodeInfo.keyValueMap) {
-        if (kv.first <= newNodeId) {
-            keysToSend.push_back(kv);
-        }
-    }
+    int pos = nodeIdString.find(':');
+
+    lli nodeId = stoll(nodeIdString.substr(pos+1));
+
+    vector< pair<lli , string> > keysAndValuesVector = nodeInfo.getKeysForPredecessor(nodeId);
 
     string keysAndValues = "";
-    for (const auto& kv : keysToSend) {
-        keysAndValues += to_string(kv.first) + ":" + kv.second + ";";
-        nodeInfo.keyValueMap.erase(kv.first);  // Remove the key from current node
+
+    /* will arrange all keys and val in form of key1:val1;key2:val2; */
+    for(int i=0;i<keysAndValuesVector.size();i++){
+        keysAndValues += to_string(keysAndValuesVector[i].first) + ":" + keysAndValuesVector[i].second;
+        keysAndValues += ";";
     }
 
-    sendto(newSock, keysAndValues.c_str(), keysAndValues.size(), 0, (struct sockaddr*)&client, sizeof(client));
+    char keysAndValuesChar[2000];
+    strcpy(keysAndValuesChar,keysAndValues.c_str());
+
+    sendto(newSock,keysAndValuesChar,strlen(keysAndValuesChar),0,(struct sockaddr *)&client,l);
 }
 
-void HelperFunctions::sendValToNode(NodeInformation nodeInfo, SOCKET newSock, struct sockaddr_in client, string nodeIdString) {
-    lli keyHash = stoll(nodeIdString);
+/* */
+void HelperFunctions::sendValToNode(NodeInformation nodeInfo,int newSock,struct sockaddr_in client,string nodeIdString){
+    nodeIdString.pop_back();
+    lli key = stoll(nodeIdString);
+    string val = nodeInfo.getValue(key);
 
-    string value = nodeInfo.keyValueMap[keyHash];
-    sendto(newSock, value.c_str(), value.size(), 0, (struct sockaddr*)&client, sizeof(client));
+    socklen_t l = sizeof(client);
+
+    char valChar[100];
+    strcpy(valChar,val.c_str());
+
+    sendto(newSock,valChar,strlen(valChar),0,(struct sockaddr *)&client,l);
 }
 
-void HelperFunctions::sendSuccessorId(NodeInformation nodeInfo, SOCKET newSock, struct sockaddr_in client) {
-    string succIdStr = to_string(nodeInfo.successor.second);
-    sendto(newSock, succIdStr.c_str(), succIdStr.size(), 0, (struct sockaddr*)&client, sizeof(client));
+/* send successor id of current node to the contacting node */
+void HelperFunctions::sendSuccessorId(NodeInformation nodeInfo,int newSock,struct sockaddr_in client){
+
+    pair< pair<string,int> , lli > succ = nodeInfo.getSuccessor();
+    string succId = to_string(succ.second);
+    char succIdChar[40];
+
+    socklen_t l = sizeof(client);
+
+    strcpy(succIdChar,succId.c_str());
+
+    sendto(newSock,succIdChar,strlen(succIdChar),0,(struct sockaddr *)&client,l);
+
 }
 
-void HelperFunctions::sendSuccessor(NodeInformation nodeInfo, string nodeIdString, SOCKET newSock, struct sockaddr_in client) {
-    string succInfo = combineIpAndPort(nodeInfo.successor.first.first, to_string(nodeInfo.successor.first.second));
-    sendto(newSock, succInfo.c_str(), succInfo.size(), 0, (struct sockaddr*)&client, sizeof(client));
+/* find successor of contacting node and send it's ip:port to it */
+void HelperFunctions::sendSuccessor(NodeInformation nodeInfo,string nodeIdString,int newSock,struct sockaddr_in client){
+    
+    lli nodeId = stoll(nodeIdString);
+
+    socklen_t l = sizeof(client);
+    
+    /* find successor of the joining node */
+    pair< pair<string,int> , lli > succNode;
+    succNode = nodeInfo.findSuccessor(nodeId);
+
+    /* get Ip and port of successor as ip:port in char array to send */
+    char ipAndPort[40];
+    string succIp = succNode.first.first;
+    string succPort = to_string(succNode.first.second);
+    strcpy(ipAndPort,combineIpAndPort(succIp,succPort).c_str());
+
+    /* send ip and port info to the respective node */
+    sendto(newSock, ipAndPort, strlen(ipAndPort), 0, (struct sockaddr*) &client, l);
+
 }
 
-void HelperFunctions::sendPredecessor(NodeInformation nodeInfo, SOCKET newSock, struct sockaddr_in client) {
-    string predInfo = combineIpAndPort(nodeInfo.predecessor.first.first, to_string(nodeInfo.predecessor.first.second));
-    sendto(newSock, predInfo.c_str(), predInfo.size(), 0, (struct sockaddr*)&client, sizeof(client));
+/* send ip:port of predecessor of current node to contacting node */
+void HelperFunctions::sendPredecessor(NodeInformation nodeInfo,int newSock,struct sockaddr_in client){
+    
+    pair< pair<string,int> , lli > predecessor = nodeInfo.getPredecessor();
+    
+    string ip = predecessor.first.first;
+    string port = to_string(predecessor.first.second);
+
+    socklen_t l = sizeof(client);
+
+    /* if predecessor is nil */
+    if(ip == ""){
+        sendto(newSock, "", 0, 0, (struct sockaddr*) &client, l);       
+    }
+
+    else{
+        string ipAndPort = combineIpAndPort(ip,port);
+
+        char ipAndPortChar[40];
+        strcpy(ipAndPortChar,ipAndPort.c_str());
+
+        sendto(newSock, ipAndPortChar, strlen(ipAndPortChar), 0, (struct sockaddr*) &client, l);
+
+    }
 }
 
-lli HelperFunctions::getSuccessorId(string ip, int port){
+/* get successor id of the node having ip address as ip and port num as port */
+lli HelperFunctions::getSuccessorId(string ip,int port){
+    
     struct sockaddr_in serverToConnectTo;
     socklen_t l = sizeof(serverToConnectTo);
 
-    setServerDetails(serverToConnectTo, ip, port);
+    setServerDetails(serverToConnectTo,ip,port);
 
+    /* set timer for socket */
     struct timeval timer;
     setTimer(timer);
 
-    SOCKET sock = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sock == INVALID_SOCKET) {
-        cerr << "Socket creation error: " << WSAGetLastError() << endl;
-        exit(EXIT_FAILURE);
+    int sock = socket(AF_INET,SOCK_DGRAM,0);
+
+    if(sock < 0){
+        perror("error");
+        exit(-1);
     }
 
-    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char*)&timer, sizeof(timer));
+    setsockopt(sock,SOL_SOCKET,SO_RCVTIMEO,(char*)&timer,sizeof(struct timeval));
+
+    if(sock < -1){
+        cout<<"socket cre error";
+        perror("error");
+        exit(-1);
+    }
 
     char msg[] = "finger";
-    sendto(sock, msg, strlen(msg), 0, (struct sockaddr*)&serverToConnectTo, l);
+
+    if (sendto(sock, msg, strlen(msg) , 0, (struct sockaddr*) &serverToConnectTo, l) == -1){
+        cout<<"yaha 11 "<<sock<<endl;
+        perror("error");
+        exit(-1);
+    }
 
     char succIdChar[40];
-    int len = recvfrom(sock, succIdChar, 1024, 0, (struct sockaddr*)&serverToConnectTo, &l);
-    closesocket(sock);
 
-    if (len < 0)
+    int len = recvfrom(sock,succIdChar,1024,0,(struct sockaddr*) &serverToConnectTo, &l);
+
+    close(sock);
+
+    if(len < 0){
         return -1;
+    }
 
     succIdChar[len] = '\0';
+
     return atoll(succIdChar);
+
 }
 
-void HelperFunctions::setTimer(struct timeval& timer) {
+void HelperFunctions::setTimer(struct timeval &timer){
     timer.tv_sec = 0;
     timer.tv_usec = 100000;
 }
 
-pair<pair<string, int>, lli> HelperFunctions::getPredecessorNode(string ip, int port, string ipClient, int portClient, bool forStabilize) {
+/* get predecessor node (ip:port) of the node having ip and port */
+pair< pair<string,int> , lli > HelperFunctions::getPredecessorNode(string ip,int port,string ipClient,int portClient,bool forStabilize){
+
     struct sockaddr_in serverToConnectTo;
     socklen_t l = sizeof(serverToConnectTo);
 
-    setServerDetails(serverToConnectTo, ip, port);
+    setServerDetails(serverToConnectTo,ip,port);
 
-    SOCKET sock = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sock == INVALID_SOCKET) {
-        cerr << "Socket creation error: " << WSAGetLastError() << endl;
-        exit(EXIT_FAILURE);
+    /* set timer for socket */
+    struct timeval timer;
+    setTimer(timer);
+
+    int sock = socket(AF_INET,SOCK_DGRAM,0);
+
+    if(sock < 0){
+        perror("error");
+        exit(-1);
     }
 
-    string message = forStabilize ? "predecessor_stabilize" : "predecessor";
-    sendto(sock, message.c_str(), message.size(), 0, (struct sockaddr*)&serverToConnectTo, l);
+    setsockopt(sock,SOL_SOCKET,SO_RCVTIMEO,(char*)&timer,sizeof(struct timeval));
 
-    char response[100];
-    int len = recvfrom(sock, response, 100, 0, (struct sockaddr*)&serverToConnectTo, &l);
-    closesocket(sock);
+    string msg = "";
 
-    if (len < 0)
-        return make_pair(make_pair("", 0), -1);
+    /* p2 means that just send predecessor of node ip:port , do not call notify */
+    /* p1 means that this is for stabilize so notify node as well */
 
-    response[len] = '\0';
-    string predInfo(response);
-    pair<string, int> ipAndPort = getIpAndPort(predInfo);
+    if(forStabilize == true){
+        msg = combineIpAndPort(ipClient,to_string(portClient));
+        msg += "p1";
+    }
 
-    return make_pair(ipAndPort, getSuccessorId(ipAndPort.first, ipAndPort.second));
+    else
+        msg = "p2";
+
+
+    char ipAndPortChar[40];
+    strcpy(ipAndPortChar,msg.c_str());
+
+    if (sendto(sock, ipAndPortChar, strlen(ipAndPortChar), 0, (struct sockaddr*) &serverToConnectTo, l) < 0){
+        cout<<"yaha 12 "<<sock<<endl;
+        perror("error");
+        exit(-1);
+    }
+
+
+    int len = recvfrom(sock, ipAndPortChar, 1024, 0, (struct sockaddr *) &serverToConnectTo, &l);
+    close(sock);
+
+    if(len < 0){
+        pair< pair<string,int> , lli > node;
+        node.first.first = "";
+        node.first.second = -1;
+        node.second = -1;
+        return node;
+    }
+
+    ipAndPortChar[len] = '\0';
+
+    
+
+    string ipAndPort = ipAndPortChar;
+    lli hash;
+    pair<string,int> ipAndPortPair;
+
+    pair< pair<string,int> , lli > node;
+
+    if(ipAndPort == ""){
+        node.first.first = "";
+        node.first.second = -1;
+        node.second = -1;
+    }
+
+    else{
+        ipAndPortPair = getIpAndPort(ipAndPort);
+        node.first.first = ipAndPortPair.first;
+        node.first.second = ipAndPortPair.second;
+        node.second = getHash(ipAndPort);
+    }
+
+    return node;
 }
 
-vector<pair<string, int>> HelperFunctions::getSuccessorListFromNode(string ip, int port) {
+/* get successor list from node having ip and port */
+vector< pair<string,int> > HelperFunctions::getSuccessorListFromNode(string ip,int port){
+
     struct sockaddr_in serverToConnectTo;
     socklen_t l = sizeof(serverToConnectTo);
 
-    setServerDetails(serverToConnectTo, ip, port);
+    setServerDetails(serverToConnectTo,ip,port);
 
-    SOCKET sock = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sock == INVALID_SOCKET) {
-        cerr << "Socket creation error: " << WSAGetLastError() << endl;
-        exit(EXIT_FAILURE);
+    /* set timer for socket */
+    struct timeval timer;
+    setTimer(timer);
+    
+
+    int sock = socket(AF_INET,SOCK_DGRAM,0);
+    if(sock < 0){
+        perror("error");
+        exit(-1);
     }
 
-    char msg[] = "successor_list";
-    sendto(sock, msg, strlen(msg), 0, (struct sockaddr*)&serverToConnectTo, l);
+    setsockopt(sock,SOL_SOCKET,SO_RCVTIMEO,(char*)&timer,sizeof(struct timeval));
 
-    char response[200];
-    int len = recvfrom(sock, response, 200, 0, (struct sockaddr*)&serverToConnectTo, &l);
-    closesocket(sock);
+    char msg[] = "sendSuccList";
 
-    response[len] = '\0';
-    return separateSuccessorList(response);
-}
+    sendto(sock,msg,strlen(msg),0,(struct sockaddr *)&serverToConnectTo,l);
 
-void HelperFunctions::sendSuccessorList(NodeInformation& nodeInfo, SOCKET sock, struct sockaddr_in client) {
-    string succList = splitSuccessorList(nodeInfo.successorList);
-    sendto(sock, succList.c_str(), succList.size(), 0, (struct sockaddr*)&client, sizeof(client));
-}
+    char succListChar[1000];
+    int len = recvfrom(sock,succListChar,1000,0,(struct sockaddr *)&serverToConnectTo,&l);
 
-string HelperFunctions::splitSuccessorList(vector<pair<pair<string, int>, lli>> list) {
-    string succList = "";
-    for (const auto& succ : list) {
-        succList += combineIpAndPort(succ.first.first, to_string(succ.first.second)) + ";";
+    close(sock);
+
+
+    if(len < 0){
+        vector< pair<string,int> > list;
+        return list;
     }
-    return succList;
+
+    succListChar[len] = '\0';
+
+    string succList = succListChar;
+
+    vector< pair<string,int> > list = seperateSuccessorList(succList);
+
+    return list;
+
 }
 
-void HelperFunctions::sendAcknowledgement(SOCKET newSock, struct sockaddr_in client) {
-    char msg[] = "ACK";
-    sendto(newSock, msg, strlen(msg), 0, (struct sockaddr*)&client, sizeof(client));
+/* send node's successor list to the contacting node */
+void HelperFunctions::sendSuccessorList(NodeInformation &nodeInfo,int sock,struct sockaddr_in client){
+    socklen_t l = sizeof(client);
+
+    vector< pair< pair<string,int> , lli > > list = nodeInfo.getSuccessorList();
+
+    string successorList = splitSuccessorList(list);
+
+    char successorListChar[1000];
+    strcpy(successorListChar,successorList.c_str());
+
+    sendto(sock,successorListChar,strlen(successorListChar),0,(struct sockaddr *)&client,l);
+
 }
 
-bool HelperFunctions::isNodeAlive(string ip, int port) {
+/* combine successor list in form of ip1:port1;ip2:port2;.. */
+string HelperFunctions::splitSuccessorList(vector< pair< pair<string,int> , lli > > list){
+    string res = "";
+
+    for(int i=1;i<=R;i++){
+
+        res = res + list[i].first.first + ":" + to_string(list[i].first.second) + ";";
+    }
+
+    return res;
+}
+
+/* send ack to contacting node that this node is still alive */
+void HelperFunctions::sendAcknowledgement(int newSock,struct sockaddr_in client){
+    socklen_t l = sizeof(client);
+
+    sendto(newSock,"1",1,0,(struct sockaddr*)&client,l);
+}
+
+/* check if node having ip and port is still alive or not */
+bool HelperFunctions::isNodeAlive(string ip,int port){
     struct sockaddr_in serverToConnectTo;
     socklen_t l = sizeof(serverToConnectTo);
 
-    setServerDetails(serverToConnectTo, ip, port);
+    setServerDetails(serverToConnectTo,ip,port);
 
-    SOCKET sock = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sock == INVALID_SOCKET) {
-        cerr << "Socket creation error: " << WSAGetLastError() << endl;
-        exit(EXIT_FAILURE);
+    /* set timer for socket */
+    struct timeval timer;
+    setTimer(timer);
+
+
+    int sock = socket(AF_INET,SOCK_DGRAM,0);
+
+    if(sock < 0){
+        perror("error");
+        exit(-1);
     }
 
-    char msg[] = "ping";
-    sendto(sock, msg, strlen(msg), 0, (struct sockaddr*)&serverToConnectTo, l);
+    /* set timer on this socket */
+    setsockopt(sock,SOL_SOCKET,SO_RCVTIMEO,(char*)&timer,sizeof(struct timeval));
 
-    char response[10];
-    int len = recvfrom(sock, response, 10, 0, (struct sockaddr*)&serverToConnectTo, &l);
-    closesocket(sock);
+    char msg[] = "alive";
+    sendto(sock,msg,strlen(msg),0,(struct sockaddr *)&serverToConnectTo,l);
 
-    return len > 0;
+    char response[5];
+    int len = recvfrom(sock,response,2,0,(struct sockaddr *)&serverToConnectTo,&l);
+
+    close(sock);
+
+    /* node is still active */
+    if(len >= 0){
+        return true;
+    }
+    else
+        return false;
 }
+
